@@ -1,11 +1,13 @@
+import type { TFunction } from "i18next";
 import type { DateArray, ParticipationRole, EventStatus, ParticipationStatus } from "ics";
 import { createEvent } from "ics";
-import type { TFunction } from "next-i18next";
 import { RRule } from "rrule";
 
-import dayjs from "@calcom/dayjs";
 import { getRichDescription } from "@calcom/lib/CalEventParser";
 import { getVideoCallUrlFromCalEvent } from "@calcom/lib/CalEventParser";
+import { ORGANIZER_EMAIL_EXEMPT_DOMAINS } from "@calcom/lib/constants";
+import { ErrorCode } from "@calcom/lib/errorCodes";
+import { ErrorWithCode } from "@calcom/lib/errors";
 import type { CalendarEvent, Person } from "@calcom/types/Calendar";
 
 export enum BookingAction {
@@ -31,7 +33,19 @@ export type ICSCalendarEvent = Pick<
   | "team"
   | "type"
   | "hideCalendarEventDetails"
+  | "hideOrganizerEmail"
 >;
+
+const toICalDateArray = (date: string): DateArray => {
+  const d = new Date(date);
+  return [
+    d.getUTCFullYear(),
+    d.getUTCMonth() + 1, // Convert 0-based month to 1-based
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes(),
+  ] satisfies DateArray;
+};
 
 const generateIcsString = ({
   event,
@@ -43,7 +57,7 @@ const generateIcsString = ({
   status: EventStatus;
   partstat?: ParticipationStatus;
   t?: TFunction;
-}) => {
+}): string | undefined => {
   const location = getVideoCallUrlFromCalEvent(event) || event.location;
 
   // Taking care of recurrence rule
@@ -54,20 +68,25 @@ const generateIcsString = ({
     recurrenceRule = new RRule(event.recurringEvent).toString().replace("RRULE:", "");
   }
 
+  const isOrganizerExempt = ORGANIZER_EMAIL_EXEMPT_DOMAINS?.split(",")
+    .filter((domain) => domain.trim() !== "")
+    .some((domain) => event.organizer.email.toLowerCase().endsWith(domain.toLowerCase()));
+
   const icsEvent = createEvent({
     uid: event.iCalUID || event.uid!,
     sequence: event.iCalSequence || 0,
-    start: dayjs(event.startTime)
-      .utc()
-      .toArray()
-      .slice(0, 6)
-      .map((v, i) => (i === 1 ? v + 1 : v)) as DateArray,
+    start: toICalDateArray(event.startTime),
+    end: toICalDateArray(event.endTime),
     startInputType: "utc",
     productId: "calcom/ics",
     title: event.title,
     description: getRichDescription(event, t),
-    duration: { minutes: dayjs(event.endTime).diff(dayjs(event.startTime), "minute") },
-    organizer: { name: event.organizer.name, email: event.organizer.email },
+    organizer: {
+      name: event.organizer.name,
+      ...(event.hideOrganizerEmail && !isOrganizerExempt
+        ? { email: "no-reply@cal.com" }
+        : { email: event.organizer.email }),
+    },
     ...{ recurrenceRule },
     attendees: [
       ...event.attendees.map((attendee: Person) => ({
@@ -91,8 +110,14 @@ const generateIcsString = ({
     method: "REQUEST",
     status,
     ...(event.hideCalendarEventDetails ? { classification: "PRIVATE" } : {}),
+    busyStatus: "BUSY",
   });
   if (icsEvent.error) {
+    // The ics library throws Yup ValidationError objects (not Error instances) for invalid data like invalid email formats.
+    // Convert these to ErrorWithCode.BadRequest so they return 400 instead of falling through to a generic 500.
+    if (icsEvent.error.name === "ValidationError") {
+      throw new ErrorWithCode(ErrorCode.BadRequest, icsEvent.error.message);
+    }
     throw icsEvent.error;
   }
   return icsEvent.value;

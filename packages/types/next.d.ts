@@ -1,4 +1,4 @@
-import type { IncomingMessage } from "http";
+import type { IncomingMessage } from "node:http";
 import type { Session } from "next-auth";
 
 import "./next-auth";
@@ -9,7 +9,7 @@ export declare module "next" {
     query: Partial<{ [key: string]: string | string[] }> & { args: string[] };
     session?: Session | null;
     // ⬇ These are needed by @calcom/api
-    body: unkown;
+    body: unknown;
     userId: number;
     method: string;
     // session: { user: { id: number } };

@@ -1,7 +1,7 @@
-import LicenseRequired from "@calcom/features/ee/common/components/LicenseRequired";
-import Shell from "@calcom/features/shell/Shell";
+import LicenseRequired from "~/ee/common/components/LicenseRequired";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { HeadSeo } from "@calcom/ui";
+
+import Shell from "~/shell/Shell";
 
 import type { AppPageProps } from "./AppPage";
 import { AppPage } from "./AppPage";
@@ -13,12 +13,7 @@ const ShellHeading = () => {
 
 export default function WrappedApp(props: AppPageProps) {
   return (
-    <Shell smallHeading isPublic hideHeadingOnMobile heading={<ShellHeading />} backPath="/apps" withoutSeo>
-      <HeadSeo
-        title={props.name}
-        description={props.description}
-        app={{ slug: props.logo, name: props.name, description: props.description }}
-      />
+    <Shell smallHeading isPublic heading={<ShellHeading />} backPath="/apps">
       {props.licenseRequired ? (
         <LicenseRequired>
           <AppPage {...props} />

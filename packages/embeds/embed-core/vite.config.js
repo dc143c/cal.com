@@ -3,7 +3,7 @@ import EnvironmentPlugin from "vite-plugin-environment";
 
 import viteBaseConfig, { embedCoreEnvVars } from "../vite.config";
 
-const path = require("path");
+const path = require("node:path");
 const { defineConfig } = require("vite");
 module.exports = defineConfig((configEnv) => {
   /** @type {import('vite').UserConfig} */
@@ -16,6 +16,8 @@ module.exports = defineConfig((configEnv) => {
         EMBED_PUBLIC_EMBED_VERSION: embedCoreEnvVars.EMBED_PUBLIC_EMBED_VERSION,
         EMBED_PUBLIC_VERCEL_URL: embedCoreEnvVars.EMBED_PUBLIC_VERCEL_URL,
         EMBED_PUBLIC_WEBAPP_URL: embedCoreEnvVars.EMBED_PUBLIC_WEBAPP_URL,
+        EMBED_PUBLIC_EMBED_LIB_URL: embedCoreEnvVars.EMBED_PUBLIC_EMBED_LIB_URL,
+        NEXT_PUBLIC_IS_E2E: embedCoreEnvVars.NEXT_PUBLIC_IS_E2E,
       }),
       ...(process.argv.includes("--https") ? [basicSsl()] : []),
     ],

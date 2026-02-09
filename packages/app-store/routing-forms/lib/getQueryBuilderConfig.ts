@@ -5,6 +5,14 @@ import { FieldTypes, RoutingFormFieldType } from "./FieldTypes";
 import { AttributesInitialConfig, FormFieldsInitialConfig } from "./InitialConfig";
 import { getUIOptionsForSelect } from "./selectOptions";
 
+export const isDynamicOperandField = (value: string) => {
+  return /{field:.*?}/.test(value);
+};
+
+const buildDynamicOperandFieldVariable = (fieldId: string) => {
+  return `{field:${fieldId}}`;
+};
+
 type RaqbConfigFields = Record<
   string,
   {
@@ -76,7 +84,7 @@ export function getQueryBuilderConfigForFormFields(form: Pick<RoutingForm, "fiel
     delete initialConfigCopy.operators.is_empty;
     delete initialConfigCopy.operators.is_not_empty;
 
-    // Between and Not between aren't directly supported by prisma. So, we need to update jsonLogicToPrisma to generate gte and lte query for between. It can be implemented later.
+    // These operators can be implemented later if needed.
     delete initialConfigCopy.operators.between;
     delete initialConfigCopy.operators.not_between;
 
@@ -135,7 +143,7 @@ export function getQueryBuilderConfigForAttributes({
       const valueOfFieldOptions = (() => {
         const formFieldsOptions = dynamicOperandFields.map((field) => ({
           title: `Value of field '${field.label}'`,
-          value: `{field:${field.id}}`,
+          value: buildDynamicOperandFieldVariable(field.id),
         }));
         return formFieldsOptions;
       })();

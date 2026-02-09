@@ -1,4 +1,4 @@
-import prismaMock from "../../../../../tests/libs/__mocks__/prismaMock";
+import prismaMock from "@calcom/testing/lib/__mocks__/prismaMock";
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
@@ -41,6 +41,7 @@ function expectFormSubmittedNoEventWebhookToBeCalled(
   const webhookPayload = {
     responses: payload.responses,
     formId: payload.form.id,
+    responseId: payload.responseId,
     formName: payload.form.name,
     teamId: null,
   };

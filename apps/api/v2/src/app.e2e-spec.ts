@@ -1,22 +1,22 @@
+import { X_CAL_CLIENT_ID, X_CAL_SECRET_KEY } from "@calcom/platform-constants";
+import type { PlatformOAuthClient, RateLimit, Team, User } from "@calcom/prisma/client";
+import { INestApplication } from "@nestjs/common";
+import { Test, TestingModule } from "@nestjs/testing";
+import request from "supertest";
+import { ApiKeysRepositoryFixture } from "test/fixtures/repository/api-keys.repository.fixture";
+import { MembershipRepositoryFixture } from "test/fixtures/repository/membership.repository.fixture";
+import { OAuthClientRepositoryFixture } from "test/fixtures/repository/oauth-client.repository.fixture";
+import { OrganizationRepositoryFixture } from "test/fixtures/repository/organization.repository.fixture";
+import { ProfileRepositoryFixture } from "test/fixtures/repository/profiles.repository.fixture";
+import { RateLimitRepositoryFixture } from "test/fixtures/repository/rate-limit.repository.fixture";
+import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
+import { randomString } from "test/utils/randomString";
 import { AppModule } from "@/app.module";
 import { SchedulesModule_2024_04_15 } from "@/ee/schedules/schedules_2024_04_15/schedules.module";
 import { CustomThrottlerGuard } from "@/lib/throttler-guard";
 import { PrismaModule } from "@/modules/prisma/prisma.module";
 import { TokensModule } from "@/modules/tokens/tokens.module";
 import { UsersModule } from "@/modules/users/users.module";
-import { INestApplication } from "@nestjs/common";
-import { TestingModule } from "@nestjs/testing";
-import { Test } from "@nestjs/testing";
-import * as request from "supertest";
-import { ApiKeysRepositoryFixture } from "test/fixtures/repository/api-keys.repository.fixture";
-import { OAuthClientRepositoryFixture } from "test/fixtures/repository/oauth-client.repository.fixture";
-import { OrganizationRepositoryFixture } from "test/fixtures/repository/organization.repository.fixture";
-import { ProfileRepositoryFixture } from "test/fixtures/repository/profiles.repository.fixture";
-import { RateLimitRepositoryFixture } from "test/fixtures/repository/rate-limit.repository.fixture";
-import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
-
-import { X_CAL_CLIENT_ID, X_CAL_SECRET_KEY } from "@calcom/platform-constants";
-import { User, PlatformOAuthClient, Team, RateLimit } from "@calcom/prisma/client";
 
 describe("AppController", () => {
   describe("Rate limiting", () => {
@@ -24,7 +24,7 @@ describe("AppController", () => {
     let userRepositoryFixture: UserRepositoryFixture;
     let apiKeysRepositoryFixture: ApiKeysRepositoryFixture;
     let rateLimitRepositoryFixture: RateLimitRepositoryFixture;
-    const userEmail = "app-rate-limits-e2e@api.com";
+    const userEmail = `app-rate-limits-user-${randomString()}@api.com`;
     let user: User;
 
     let organization: Team;
@@ -32,6 +32,7 @@ describe("AppController", () => {
     let organizationsRepositoryFixture: OrganizationRepositoryFixture;
     let oauthClientRepositoryFixture: OAuthClientRepositoryFixture;
     let profilesRepositoryFixture: ProfileRepositoryFixture;
+    let membershipRepositoryFixture: MembershipRepositoryFixture;
 
     let apiKeyString: string;
 
@@ -94,7 +95,9 @@ describe("AppController", () => {
       );
 
       organizationsRepositoryFixture = new OrganizationRepositoryFixture(moduleRef);
-      organization = await organizationsRepositoryFixture.create({ name: "ecorp" });
+      organization = await organizationsRepositoryFixture.create({
+        name: `app-rate-limits-organization-${randomString()}`,
+      });
       oauthClientRepositoryFixture = new OAuthClientRepositoryFixture(moduleRef);
       oAuthClient = await createOAuthClient(organization.id);
       profilesRepositoryFixture = new ProfileRepositoryFixture(moduleRef);
@@ -103,6 +106,14 @@ describe("AppController", () => {
         username: userEmail,
         user: { connect: { id: user.id } },
         organization: { connect: { id: organization.id } },
+      });
+
+      membershipRepositoryFixture = new MembershipRepositoryFixture(moduleRef);
+      await membershipRepositoryFixture.create({
+        user: { connect: { id: user.id } },
+        team: { connect: { id: organization.id } },
+        role: "OWNER",
+        accepted: true,
       });
 
       app = moduleRef.createNestApplication();

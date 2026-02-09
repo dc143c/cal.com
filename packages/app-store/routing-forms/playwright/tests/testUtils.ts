@@ -34,9 +34,10 @@ export async function addForm(
 export async function addOneFieldAndDescriptionAndSaveForm(
   formId: string,
   page: Page,
-  form: { description?: string; field?: { typeIndex: number; label: string } }
+  form: { name: string; description?: string; field?: { typeIndex: number; label: string } }
 ) {
   await page.goto(`apps/routing-forms/form-edit/${formId}`);
+  await expect(page.locator('[name="name"]')).toHaveValue(form.name);
   await page.click('[data-testid="add-field"]');
   if (form.description) {
     await page.fill('[data-testid="description"]', form.description);
@@ -45,7 +46,7 @@ export async function addOneFieldAndDescriptionAndSaveForm(
   // Verify all Options of SelectBox
   const { optionsInUi: types } = await verifySelectOptions(
     { selector: ".data-testid-field-type", nth: 0 },
-    ["Email", "Long Text", "Multiple Selection", "Number", "Phone", "Single Selection", "Short Text"],
+    ["Email", "Long text", "Multiple choice selection", "Number", "Phone", "Single-choice selection", "Short text"],
     page
   );
 

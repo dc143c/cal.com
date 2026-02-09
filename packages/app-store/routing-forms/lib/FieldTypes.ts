@@ -8,9 +8,21 @@ export const enum RoutingFormFieldType {
   EMAIL = "email",
 }
 
+export const isValidRoutingFormFieldType = (type: string): type is RoutingFormFieldType => {
+  return [
+    RoutingFormFieldType.TEXT,
+    RoutingFormFieldType.NUMBER,
+    RoutingFormFieldType.TEXTAREA,
+    RoutingFormFieldType.SINGLE_SELECT,
+    RoutingFormFieldType.MULTI_SELECT,
+    RoutingFormFieldType.PHONE,
+    RoutingFormFieldType.EMAIL,
+  ].includes(type as RoutingFormFieldType);
+};
+
 export const FieldTypes = [
   {
-    label: "Short Text",
+    label: "Short text",
     value: RoutingFormFieldType.TEXT,
   },
   {
@@ -18,15 +30,15 @@ export const FieldTypes = [
     value: RoutingFormFieldType.NUMBER,
   },
   {
-    label: "Long Text",
+    label: "Long text",
     value: RoutingFormFieldType.TEXTAREA,
   },
   {
-    label: "Single Selection",
+    label: "Single-choice selection",
     value: RoutingFormFieldType.SINGLE_SELECT,
   },
   {
-    label: "Multiple Selection",
+    label: "Multiple choice selection",
     value: RoutingFormFieldType.MULTI_SELECT,
   },
   {

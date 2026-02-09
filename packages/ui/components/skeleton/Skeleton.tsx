@@ -1,7 +1,7 @@
 import React from "react";
 
-import classNames from "@calcom/lib/classNames";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
+import classNames from "@calcom/ui/classNames";
 
 type SkeletonBaseProps = {
   className?: string;
@@ -103,7 +103,7 @@ const SelectSkeletonLoader: React.FC<SkeletonLoaderProps> = ({ className }) => {
         "border-subtle group flex w-full items-center justify-between rounded-sm border px-[10px] py-3",
         className
       )}>
-      <div className="flex-grow truncate text-sm">
+      <div className="grow truncate text-sm">
         <div className="flex justify-between">
           <SkeletonText className="h-4 w-32" />
           <SkeletonText className="h-4 w-4" />

@@ -1,15 +1,14 @@
-import { Prisma } from "@prisma/client";
-
 import type { Dayjs } from "@calcom/dayjs";
 import dayjs from "@calcom/dayjs";
-import type { DateRange } from "@calcom/lib/date-ranges";
-import { buildDateRanges } from "@calcom/lib/date-ranges";
-import { UserRepository } from "@calcom/lib/server/repository/user";
+import type { DateRange } from "@calcom/features/schedules/lib/date-ranges";
+import { buildDateRanges } from "@calcom/features/schedules/lib/date-ranges";
+import { UserRepository } from "@calcom/features/users/repositories/UserRepository";
 import { prisma } from "@calcom/prisma";
+import { Prisma } from "@calcom/prisma/client";
 
 import { TRPCError } from "@trpc/server";
 
-import type { TrpcSessionUser } from "../../../../trpc";
+import type { TrpcSessionUser } from "../../../../types";
 import type { TListTeamAvailaiblityScheme } from "./listTeamAvailability.schema";
 
 type GetOptions = {
@@ -71,13 +70,20 @@ async function getTeamMembers({
     distinct: ["userId"],
   });
 
+  const userRepo = new UserRepository(prisma);
+  const users = memberships.map((membership) => membership.user);
+  const enrichedUsers = await userRepo.enrichUsersWithTheirProfileExcludingOrgMetadata(users);
+  const enrichedUserMap = new Map<number, (typeof enrichedUsers)[0]>();
+  enrichedUsers.forEach((enrichedUser) => {
+    enrichedUserMap.set(enrichedUser.id, enrichedUser);
+  });
   const membershipWithUserProfile = [];
   for (const membership of memberships) {
+    const enrichedUser = enrichedUserMap.get(membership.user.id);
+    if (!enrichedUser) continue;
     membershipWithUserProfile.push({
       ...membership,
-      user: await UserRepository.enrichUserWithItsProfile({
-        user: membership.user,
-      }),
+      user: enrichedUser,
     });
   }
 
@@ -144,15 +150,6 @@ async function getInfoForAllTeams({ ctx, input }: GetOptions) {
     .findMany({
       where: {
         userId: ctx.user.id,
-        ...(searchString
-          ? {
-              OR: [
-                { user: { username: { contains: searchString } } },
-                { user: { name: { contains: searchString } } },
-                { user: { email: { contains: searchString } } },
-              ],
-            }
-          : {}),
       },
       select: {
         id: true,
@@ -201,10 +198,12 @@ export const listTeamAvailabilityHandler = async ({ ctx, input }: GetOptions) =>
     teamMembers = teamAllInfo.teamMembers;
     totalTeamMembers = teamAllInfo.totalTeamMembers;
   } else {
-    const isMember = await prisma.membership.findFirst({
+    const isMember = await prisma.membership.findUnique({
       where: {
-        teamId,
-        userId: ctx.user.id,
+        userId_teamId: {
+          userId: ctx.user.id,
+          teamId,
+        },
       },
     });
 

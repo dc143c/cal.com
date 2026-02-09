@@ -257,8 +257,8 @@ export default class CloseCom {
         body: new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: this.refresh_token,
-          client_id: process.env.CLOSECOM_CLIENT_ID!,
-          client_secret: process.env.CLOSECOM_CLIENT_SECRET!,
+          client_id: process.env.CLOSECOM_CLIENT_ID ?? "",
+          client_secret: process.env.CLOSECOM_CLIENT_SECRET ?? "",
         }),
       });
 
@@ -477,7 +477,7 @@ export default class CloseCom {
       body: JSON.stringify(data),
     }).then(async (response) => {
       if (!response.ok) {
-        const message = `[Close.com app] An error has occured: ${response.status}`;
+        const message = `[Close.com app] An error has occurred: ${response.status}`;
         this.log.error(await response.json());
         throw new Error(message);
       }

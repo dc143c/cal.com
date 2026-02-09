@@ -1,5 +1,32 @@
-import { bootstrap } from "@/app";
+import { CAL_API_VERSION_HEADER, SUCCESS_STATUS, VERSION_2024_08_13 } from "@calcom/platform-constants";
+import {
+  AttendeeCancelledEmail,
+  AttendeeRescheduledEmail,
+  AttendeeScheduledEmail,
+  OrganizerCancelledEmail,
+  OrganizerRescheduledEmail,
+  OrganizerScheduledEmail,
+} from "@calcom/platform-libraries/emails";
+import {
+  BookingOutput_2024_08_13,
+  CancelBookingInput_2024_08_13,
+  CreateBookingInput_2024_08_13,
+  RescheduleBookingInput_2024_08_13,
+} from "@calcom/platform-types";
+import type { Team, User } from "@calcom/prisma/client";
+import { INestApplication } from "@nestjs/common";
+import { NestExpressApplication } from "@nestjs/platform-express";
+import { Test } from "@nestjs/testing";
+import request from "supertest";
+import { ApiKeysRepositoryFixture } from "test/fixtures/repository/api-keys.repository.fixture";
+import { BookingsRepositoryFixture } from "test/fixtures/repository/bookings.repository.fixture";
+import { EventTypesRepositoryFixture } from "test/fixtures/repository/event-types.repository.fixture";
+import { TeamRepositoryFixture } from "test/fixtures/repository/team.repository.fixture";
+import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
+import { randomString } from "test/utils/randomString";
+import { withApiAuth } from "test/utils/withApiAuth";
 import { AppModule } from "@/app.module";
+import { bootstrap } from "@/bootstrap";
 import { CancelBookingOutput_2024_08_13 } from "@/ee/bookings/2024-08-13/outputs/cancel-booking.output";
 import { CreateBookingOutput_2024_08_13 } from "@/ee/bookings/2024-08-13/outputs/create-booking.output";
 import { RescheduleBookingOutput_2024_08_13 } from "@/ee/bookings/2024-08-13/outputs/reschedule-booking.output";
@@ -9,34 +36,6 @@ import { SchedulesService_2024_04_15 } from "@/ee/schedules/schedules_2024_04_15
 import { PermissionsGuard } from "@/modules/auth/guards/permissions/permissions.guard";
 import { PrismaModule } from "@/modules/prisma/prisma.module";
 import { UsersModule } from "@/modules/users/users.module";
-import { INestApplication } from "@nestjs/common";
-import { NestExpressApplication } from "@nestjs/platform-express";
-import { Test } from "@nestjs/testing";
-import { User } from "@prisma/client";
-import * as request from "supertest";
-import { ApiKeysRepositoryFixture } from "test/fixtures/repository/api-keys.repository.fixture";
-import { BookingsRepositoryFixture } from "test/fixtures/repository/bookings.repository.fixture";
-import { EventTypesRepositoryFixture } from "test/fixtures/repository/event-types.repository.fixture";
-import { TeamRepositoryFixture } from "test/fixtures/repository/team.repository.fixture";
-import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
-import { withApiAuth } from "test/utils/withApiAuth";
-
-import { CAL_API_VERSION_HEADER, SUCCESS_STATUS, VERSION_2024_08_13 } from "@calcom/platform-constants";
-import {
-  AttendeeScheduledEmail,
-  OrganizerScheduledEmail,
-  AttendeeRescheduledEmail,
-  OrganizerRescheduledEmail,
-  AttendeeCancelledEmail,
-  OrganizerCancelledEmail,
-} from "@calcom/platform-libraries";
-import {
-  CreateBookingInput_2024_08_13,
-  BookingOutput_2024_08_13,
-  RescheduleBookingInput_2024_08_13,
-  CancelBookingInput_2024_08_13,
-} from "@calcom/platform-types";
-import { Team } from "@calcom/prisma/client";
 
 jest.spyOn(AttendeeScheduledEmail.prototype as any, "getHtml").mockImplementation(async function () {
   return "<html><body>Mocked Email Content</body></html>";
@@ -72,10 +71,11 @@ describe("Bookings Endpoints 2024-08-13", () => {
     let apiKeysRepositoryFixture: ApiKeysRepositoryFixture;
     let apiKeyString: string;
 
-    const userEmail = "bookings-controller-e2e@api.com";
+    const userEmail = `api-key-bookings-2024-08-13-user-${randomString()}@api.com`;
     let user: User;
 
     let eventTypeId: number;
+    const eventTypeSlug = `api-key-bookings-2024-08-13-event-type-${randomString()}`;
 
     let createdBooking: BookingOutput_2024_08_13;
     let rescheduledBooking: BookingOutput_2024_08_13;
@@ -100,7 +100,9 @@ describe("Bookings Endpoints 2024-08-13", () => {
       schedulesService = moduleRef.get<SchedulesService_2024_04_15>(SchedulesService_2024_04_15);
       apiKeysRepositoryFixture = new ApiKeysRepositoryFixture(moduleRef);
 
-      organization = await teamRepositoryFixture.create({ name: "organization bookings" });
+      organization = await teamRepositoryFixture.create({
+        name: `api-key-bookings-organization-${randomString()}`,
+      });
 
       user = await userRepositoryFixture.create({
         email: userEmail,
@@ -110,13 +112,17 @@ describe("Bookings Endpoints 2024-08-13", () => {
       apiKeyString = keyString;
 
       const userSchedule: CreateScheduleInput_2024_04_15 = {
-        name: "working time",
+        name: `api-key-bookings-e2e-api-key-bookings-2024-08-13-schedule-${randomString()}`,
         timeZone: "Europe/Rome",
         isDefault: true,
       };
       await schedulesService.createUserSchedule(user.id, userSchedule);
       const event = await eventTypesRepositoryFixture.create(
-        { title: "peer coding", slug: "peer-coding", length: 60 },
+        {
+          title: `api-key-bookings-e2e-api-key-bookings-2024-08-13-event-type-${randomString()}`,
+          slug: eventTypeSlug,
+          length: 60,
+        },
         user.id
       );
       eventTypeId = event.id;
@@ -170,6 +176,7 @@ describe("Bookings Endpoints 2024-08-13", () => {
             expect(data.attendees[0]).toEqual({
               name: body.attendee.name,
               email: body.attendee.email,
+              displayEmail: body.attendee.email,
               timeZone: body.attendee.timeZone,
               language: body.attendee.language,
               absent: false,
@@ -181,7 +188,7 @@ describe("Bookings Endpoints 2024-08-13", () => {
             createdBooking = data;
           } else {
             throw new Error(
-              "Invalid response data - expected booking but received array of possibily recurring bookings"
+              "Invalid response data - expected booking but received array of possibly recurring bookings"
             );
           }
         });
@@ -209,7 +216,7 @@ describe("Bookings Endpoints 2024-08-13", () => {
             expect(responseBody.status).toEqual(SUCCESS_STATUS);
             expect(responseBody.data).toBeDefined();
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
+            // @ts-expect-error
             const data: BookingOutput_2024_08_13 = responseBody.data;
             expect(data.reschedulingReason).toEqual(body.reschedulingReason);
             expect(data.start).toEqual(body.start);
@@ -230,7 +237,7 @@ describe("Bookings Endpoints 2024-08-13", () => {
             rescheduledBooking = data;
           } else {
             throw new Error(
-              "Invalid response data - expected booking but received array of possibily recurring bookings"
+              "Invalid response data - expected booking but received array of possibly recurring bookings"
             );
           }
         });
@@ -255,7 +262,7 @@ describe("Bookings Endpoints 2024-08-13", () => {
           expect(responseBody.status).toEqual(SUCCESS_STATUS);
           expect(responseBody.data).toBeDefined();
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
+          // @ts-expect-error
           const data: BookingOutput_2024_08_13 = responseBody.data;
           expect(data.id).toBeDefined();
           expect(data.uid).toBeDefined();

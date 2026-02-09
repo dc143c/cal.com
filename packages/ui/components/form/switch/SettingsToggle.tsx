@@ -1,10 +1,10 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import type { ReactNode } from "react";
 
-import { classNames } from "@calcom/lib";
+import classNames from "@calcom/ui/classNames";
 
 import { Label } from "../inputs/Label";
-import Switch from "./Switch";
+import { Switch } from "./Switch";
 
 type Props = {
   children?: ReactNode;
@@ -23,9 +23,10 @@ type Props = {
   labelClassName?: string;
   descriptionClassName?: string;
   noIndentation?: boolean;
+  hideSwitch?: boolean;
 };
 
-function SettingsToggle({
+export function SettingsToggle({
   checked,
   onCheckedChange,
   description,
@@ -41,13 +42,14 @@ function SettingsToggle({
   labelClassName,
   descriptionClassName,
   noIndentation = false,
+  hideSwitch,
   ...rest
 }: Props) {
   const [animateRef] = useAutoAnimate<HTMLDivElement>();
 
   return (
     <>
-      <div className="flex w-full flex-col space-y-4 lg:flex-row lg:space-x-4 lg:space-y-0">
+      <div className="flex w-full flex-col stack-y-4 lg:flex-row lg:space-x-4 lg:stack-y-0">
         <fieldset className="block w-full flex-col sm:flex">
           {toggleSwitchAtTheEnd ? (
             <div
@@ -77,16 +79,18 @@ function SettingsToggle({
                   </p>
                 )}
               </div>
-              <div className="my-auto h-full">
-                <Switch
-                  data-testid={rest["data-testid"]}
-                  fitToHeight={true}
-                  checked={checked}
-                  onCheckedChange={onCheckedChange}
-                  disabled={disabled}
-                  tooltip={tooltip}
-                />
-              </div>
+              {!hideSwitch && (
+                <div className="my-auto h-full">
+                  <Switch
+                    data-testid={rest["data-testid"]}
+                    fitToHeight={true}
+                    checked={checked}
+                    onCheckedChange={onCheckedChange}
+                    disabled={disabled}
+                    tooltip={tooltip}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex space-x-3">
@@ -102,7 +106,7 @@ function SettingsToggle({
               <div>
                 <Label
                   className={classNames("text-emphasis text-sm font-semibold leading-none", labelClassName)}>
-                  {title}
+                  {title} {Badge ? Badge : null}
                   {LockedIcon}
                 </Label>
                 {description && <p className="text-default -mt-1.5 text-sm leading-normal">{description}</p>}
@@ -119,5 +123,3 @@ function SettingsToggle({
     </>
   );
 }
-
-export default SettingsToggle;

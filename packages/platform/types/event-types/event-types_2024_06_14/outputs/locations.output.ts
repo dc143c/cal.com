@@ -11,11 +11,11 @@ import {
   InputAttendeeDefinedLocation_2024_06_14,
   InputAttendeePhoneLocation_2024_06_14,
   InputLinkLocation_2024_06_14,
-  inputLocations,
+  eventTypeInputLocations,
   InputPhoneLocation_2024_06_14,
 } from "../inputs";
 
-const outputLocations = [...inputLocations, "conferencing", "unknown"] as const;
+const outputLocations = [...eventTypeInputLocations, "conferencing", "unknown"] as const;
 
 export class OutputAddressLocation_2024_06_14 extends InputAddressLocation_2024_06_14 {}
 export class OutputLinkLocation_2024_06_14 extends InputLinkLocation_2024_06_14 {}
@@ -53,9 +53,7 @@ const integrationsValues = [
   "eightxeight-video",
   "discord-video",
   "demodesk-video",
-  "campsite-conferencing",
   "campfire-video",
-  "around-video",
 ] as const;
 export type OutputIntegration_2024_06_14 = (typeof integrationsValues)[number];
 
@@ -87,10 +85,13 @@ export class OutputIntegrationLocation_2024_06_14 {
   credentialId?: number;
 }
 
-export class OutputConferencingLocation_2024_06_14 {
+export class OutputOrganizersDefaultAppLocation_2024_06_14 {
   @IsIn(outputLocations)
-  @DocsProperty({ example: "conferencing", description: "only allowed value for type is `conferencing`" })
-  type!: "conferencing";
+  @DocsProperty({
+    example: "organizersDefaultApp",
+    description: "only allowed value for type is `organizersDefaultApp`",
+  })
+  type!: "organizersDefaultApp";
 }
 
 export class OutputUnknownLocation_2024_06_14 {
@@ -111,7 +112,7 @@ export type OutputLocation_2024_06_14 =
   | OutputAttendeeAddressLocation_2024_06_14
   | OutputAttendeePhoneLocation_2024_06_14
   | OutputAttendeeDefinedLocation_2024_06_14
-  | OutputConferencingLocation_2024_06_14
+  | OutputOrganizersDefaultAppLocation_2024_06_14
   | OutputUnknownLocation_2024_06_14;
 
 @ValidatorConstraint({ async: true })
@@ -124,7 +125,7 @@ class OutputLocationValidator_2024_06_14 implements ValidatorConstraintInterface
     attendeePhone: OutputAttendeePhoneLocation_2024_06_14,
     attendeeAddress: OutputAttendeeAddressLocation_2024_06_14,
     attendeeDefined: OutputAttendeeDefinedLocation_2024_06_14,
-    conferencing: OutputConferencingLocation_2024_06_14,
+    conferencing: OutputOrganizersDefaultAppLocation_2024_06_14,
     unknown: OutputUnknownLocation_2024_06_14,
   };
 

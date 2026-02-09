@@ -1,12 +1,12 @@
 import { getLocalAppMetadata } from "@calcom/app-store/utils";
-import { sendDisabledAppEmail } from "@calcom/emails";
-import { getTranslation } from "@calcom/lib/server";
+import { sendDisabledAppEmail } from "@calcom/emails/integration-email-service";
+import { getTranslation } from "@calcom/lib/server/i18n";
 import type { PrismaClient } from "@calcom/prisma";
 import { AppCategories } from "@calcom/prisma/enums";
 
 import { TRPCError } from "@trpc/server";
 
-import type { TrpcSessionUser } from "../../../trpc";
+import type { TrpcSessionUser } from "../../../types";
 import type { TToggleInputSchema } from "./toggle.schema";
 
 type ToggleOptions = {
@@ -131,11 +131,9 @@ export const toggleHandler = async ({ input, ctx }: ToggleOptions) => {
                 ...(eventType.metadata as object),
                 apps: {
                   // From this comment we can not type JSON fields in Prisma https://github.com/prisma/prisma/issues/3219#issuecomment-670202980
-                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                  //@ts-ignore
+                  // @ts-expect-error
                   ...eventType.metadata?.apps,
-                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                  //@ts-ignore
+                  // @ts-expect-error
                   [app.slug]: { ...eventType.metadata?.apps[app.slug], enabled: false },
                 },
               },

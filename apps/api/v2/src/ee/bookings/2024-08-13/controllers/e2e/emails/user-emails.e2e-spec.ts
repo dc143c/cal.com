@@ -1,5 +1,32 @@
-import { bootstrap } from "@/app";
+import { CAL_API_VERSION_HEADER, SUCCESS_STATUS, VERSION_2024_08_13 } from "@calcom/platform-constants";
+import {
+  AttendeeCancelledEmail,
+  AttendeeRescheduledEmail,
+  AttendeeScheduledEmail,
+  OrganizerCancelledEmail,
+  OrganizerRescheduledEmail,
+  OrganizerScheduledEmail,
+} from "@calcom/platform-libraries/emails";
+import type {
+  BookingOutput_2024_08_13,
+  CancelBookingInput_2024_08_13,
+  CreateBookingInput_2024_08_13,
+  RecurringBookingOutput_2024_08_13,
+  RescheduleBookingInput_2024_08_13,
+} from "@calcom/platform-types";
+import type { Team, User } from "@calcom/prisma/client";
+import { INestApplication } from "@nestjs/common";
+import { NestExpressApplication } from "@nestjs/platform-express";
+import { Test } from "@nestjs/testing";
+import request from "supertest";
+import { BookingsRepositoryFixture } from "test/fixtures/repository/bookings.repository.fixture";
+import { EventTypesRepositoryFixture } from "test/fixtures/repository/event-types.repository.fixture";
+import { OAuthClientRepositoryFixture } from "test/fixtures/repository/oauth-client.repository.fixture";
+import { TeamRepositoryFixture } from "test/fixtures/repository/team.repository.fixture";
+import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
+import { randomString } from "test/utils/randomString";
 import { AppModule } from "@/app.module";
+import { bootstrap } from "@/bootstrap";
 import { CancelBookingOutput_2024_08_13 } from "@/ee/bookings/2024-08-13/outputs/cancel-booking.output";
 import { CreateBookingOutput_2024_08_13 } from "@/ee/bookings/2024-08-13/outputs/create-booking.output";
 import { RescheduleBookingOutput_2024_08_13 } from "@/ee/bookings/2024-08-13/outputs/reschedule-booking.output";
@@ -10,34 +37,6 @@ import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
 import { PermissionsGuard } from "@/modules/auth/guards/permissions/permissions.guard";
 import { PrismaModule } from "@/modules/prisma/prisma.module";
 import { UsersModule } from "@/modules/users/users.module";
-import { INestApplication } from "@nestjs/common";
-import { NestExpressApplication } from "@nestjs/platform-express";
-import { Test } from "@nestjs/testing";
-import { User } from "@prisma/client";
-import * as request from "supertest";
-import { BookingsRepositoryFixture } from "test/fixtures/repository/bookings.repository.fixture";
-import { EventTypesRepositoryFixture } from "test/fixtures/repository/event-types.repository.fixture";
-import { OAuthClientRepositoryFixture } from "test/fixtures/repository/oauth-client.repository.fixture";
-import { TeamRepositoryFixture } from "test/fixtures/repository/team.repository.fixture";
-import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
-
-import { CAL_API_VERSION_HEADER, SUCCESS_STATUS, VERSION_2024_08_13 } from "@calcom/platform-constants";
-import {
-  OrganizerScheduledEmail,
-  AttendeeScheduledEmail,
-  OrganizerRescheduledEmail,
-  AttendeeRescheduledEmail,
-  OrganizerCancelledEmail,
-  AttendeeCancelledEmail,
-} from "@calcom/platform-libraries";
-import {
-  CreateBookingInput_2024_08_13,
-  BookingOutput_2024_08_13,
-  RescheduleBookingInput_2024_08_13,
-  RecurringBookingOutput_2024_08_13,
-} from "@calcom/platform-types";
-import { CancelBookingInput_2024_08_13 } from "@calcom/platform-types";
-import { Team } from "@calcom/prisma/client";
 
 jest
   .spyOn(AttendeeScheduledEmail.prototype, "getHtml")
@@ -101,7 +100,9 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
     teamRepositoryFixture = new TeamRepositoryFixture(moduleRef);
     schedulesService = moduleRef.get<SchedulesService_2024_04_15>(SchedulesService_2024_04_15);
 
-    organization = await teamRepositoryFixture.create({ name: "organization bookings" });
+    organization = await teamRepositoryFixture.create({
+      name: `user-emails-2024-08-13-organization-${randomString()}`,
+    });
 
     await setupEnabledEmails();
     await setupDisabledEmails();
@@ -116,7 +117,7 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
     const oAuthClientEmailsEnabled = await createOAuthClient(organization.id, true);
 
     const user = await userRepositoryFixture.create({
-      email: `alice-${Math.floor(Math.random() * 1000)}@gmail.com`,
+      email: `user-emails-2024-08-13-user-${randomString()}@api.com`,
       platformOAuthClients: {
         connect: {
           id: oAuthClientEmailsEnabled.id,
@@ -125,22 +126,26 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
     });
 
     const userSchedule: CreateScheduleInput_2024_04_15 = {
-      name: "working time",
+      name: `user-emails-2024-08-13-schedule-${randomString()}`,
       timeZone: "Europe/Rome",
       isDefault: true,
     };
     await schedulesService.createUserSchedule(user.id, userSchedule);
 
     const event = await eventTypesRepositoryFixture.create(
-      { title: "peer coding", slug: "peer-coding", length: 60 },
+      {
+        title: `user-emails-2024-08-13-event-type-${randomString()}`,
+        slug: `user-emails-2024-08-13-event-type-${randomString()}`,
+        length: 60,
+      },
       user.id
     );
 
     const recurringEvent = await eventTypesRepositoryFixture.create(
       // note(Lauris): freq 2 means weekly, interval 1 means every week and count 3 means 3 weeks in a row
       {
-        title: "peer coding recurring",
-        slug: "peer-coding-recurring",
+        title: `user-emails-2024-08-13-recurring-event-type-${randomString()}`,
+        slug: `user-emails-2024-08-13-recurring-event-type-${randomString()}`,
         length: 60,
         recurringEvent: { freq: 2, count: 3, interval: 1 },
       },
@@ -160,7 +165,7 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
     const oAuthClientEmailsDisabled = await createOAuthClient(organization.id, false);
 
     const user = await userRepositoryFixture.create({
-      email: `bob-${Math.floor(Math.random() * 1000)}@gmail.com`,
+      email: `user-emails-2024-08-13-user-${randomString()}@api.com`,
       platformOAuthClients: {
         connect: {
           id: oAuthClientEmailsDisabled.id,
@@ -168,21 +173,25 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
       },
     });
     const userSchedule: CreateScheduleInput_2024_04_15 = {
-      name: "working time",
+      name: `user-emails-2024-08-13-schedule-${randomString()}`,
       timeZone: "Europe/Rome",
       isDefault: true,
     };
     await schedulesService.createUserSchedule(user.id, userSchedule);
     const event = await eventTypesRepositoryFixture.create(
-      { title: "peer coding", slug: "peer-coding", length: 60 },
+      {
+        title: `user-emails-2024-08-13-event-type-${randomString()}`,
+        slug: `user-emails-2024-08-13-event-type-${randomString()}`,
+        length: 60,
+      },
       user.id
     );
 
     const recurringEvent = await eventTypesRepositoryFixture.create(
       // note(Lauris): freq 2 means weekly, interval 1 means every week and count 3 means 3 weeks in a row
       {
-        title: "peer coding recurring",
-        slug: "peer-coding-recurring",
+        title: `user-emails-2024-08-13-recurring-event-type-${randomString()}`,
+        slug: `user-emails-2024-08-13-recurring-event-type-${randomString()}`,
         length: 60,
         recurringEvent: { freq: 2, count: 3, interval: 1 },
       },
@@ -250,7 +259,7 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
             emailsDisabledSetup.createdBookingUid = responseBody.data.uid;
           } else {
             throw new Error(
-              "Invalid response data - expected booking but received array of possibily recurring bookings"
+              "Invalid response data - expected booking but received array of possibly recurring bookings"
             );
           }
         });
@@ -367,10 +376,10 @@ describe("Bookings Endpoints 2024-08-13 user emails", () => {
             const data: BookingOutput_2024_08_13 = responseBody.data;
             expect(AttendeeScheduledEmail.prototype.getHtml).toHaveBeenCalled();
             expect(OrganizerScheduledEmail.prototype.getHtml).toHaveBeenCalled();
-            emailsEnabledSetup.createdBookingUid = responseBody.data.uid;
+            emailsEnabledSetup.createdBookingUid = data.uid;
           } else {
             throw new Error(
-              "Invalid response data - expected booking but received array of possibily recurring bookings"
+              "Invalid response data - expected booking but received array of possibly recurring bookings"
             );
           }
         });

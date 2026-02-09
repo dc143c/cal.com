@@ -5,8 +5,15 @@ import Page from "~/more/more-page-view";
 export const generateMetadata = async () => {
   return await _generateMetadata(
     (t) => t("more"),
-    () => ""
+    () => "",
+    undefined,
+    undefined,
+    "/more"
   );
 };
 
-export default Page;
+const ServerPageWrapper = async () => {
+  return <Page />;
+};
+
+export default ServerPageWrapper;

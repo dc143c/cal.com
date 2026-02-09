@@ -28,12 +28,13 @@ import type {
   Calendar,
   CalendarEvent,
   EventBusyDate,
+  GetAvailabilityParams,
   IntegrationCalendar,
   NewCalendarEventType,
 } from "@calcom/types/Calendar";
 import type { CredentialPayload } from "@calcom/types/Credential";
 
-export default class ExchangeCalendarService implements Calendar {
+class ExchangeCalendarService implements Calendar {
   private url = "";
   private integrationName = "";
   private log: typeof logger;
@@ -142,12 +143,13 @@ export default class ExchangeCalendarService implements Calendar {
     }
   }
 
-  async getAvailability(dateFrom: string, dateTo: string, selectedCalendars: IntegrationCalendar[]) {
+  async getAvailability(params: GetAvailabilityParams): Promise<EventBusyDate[]> {
+    const { dateFrom, dateTo, selectedCalendars } = params;
     try {
       const externalCalendars: IntegrationCalendar[] = await this.listCalendars();
       const calendarsToGetAppointmentsFrom = [];
       for (let i = 0; i < selectedCalendars.length; i++) {
-        //Only select vaild calendars! (We get all all active calendars on the instance! even from different users!)
+        //Only select valid calendars! (We get all all active calendars on the instance! even from different users!)
         for (let k = 0; k < externalCalendars.length; k++) {
           if (selectedCalendars[i].externalId == externalCalendars[k].externalId) {
             calendarsToGetAppointmentsFrom.push(selectedCalendars[i]);
@@ -233,4 +235,13 @@ export default class ExchangeCalendarService implements Calendar {
     exch1.Url = new Uri(this.url);
     return exch1;
   }
+}
+
+/**
+ * Factory function that creates an Exchange 2013 Calendar service instance.
+ * This is exported instead of the class to prevent SDK types (like ews-javascript-api types)
+ * from leaking into the emitted .d.ts file.
+ */
+export default function BuildCalendarService(credential: CredentialPayload): Calendar {
+  return new ExchangeCalendarService(credential);
 }

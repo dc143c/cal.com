@@ -1,24 +1,30 @@
 import { getCalendar } from "@calcom/app-store/_utils/getCalendar";
-import { updateMeeting } from "@calcom/core/videoClient";
-import { sendCancelledSeatEmailsAndSMS } from "@calcom/emails";
+import { getAllDelegationCredentialsForUserIncludeServiceAccountKey } from "@calcom/app-store/delegationCredential";
+import { getDelegationCredentialOrFindRegularCredential } from "@calcom/app-store/delegationCredential";
+import { sendCancelledSeatEmailsAndSMS } from "@calcom/emails/email-manager";
+import { updateMeeting } from "@calcom/features/conferencing/lib/videoClient";
+import { WorkflowRepository } from "@calcom/features/ee/workflows/repositories/WorkflowRepository";
+import type { WebhookVersion } from "@calcom/features/webhooks/lib/interface/IWebhookRepository";
 import sendPayload from "@calcom/features/webhooks/lib/sendOrSchedulePayload";
 import type { EventPayloadType, EventTypeInfo } from "@calcom/features/webhooks/lib/sendPayload";
+import { getRichDescription } from "@calcom/lib/CalEventParser";
 import { HttpError } from "@calcom/lib/http-error";
 import logger from "@calcom/lib/logger";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import { getTranslation } from "@calcom/lib/server/i18n";
-import { WorkflowRepository } from "@calcom/lib/server/repository/workflow";
 import prisma from "@calcom/prisma";
 import { WebhookTriggerEvents } from "@calcom/prisma/enums";
-import { credentialForCalendarServiceSelect } from "@calcom/prisma/selects/credential";
 import { bookingCancelAttendeeSeatSchema } from "@calcom/prisma/zod-utils";
 import type { EventTypeMetadata } from "@calcom/prisma/zod-utils";
 import type { CalendarEvent } from "@calcom/types/Calendar";
 
-import type { CustomRequest } from "../../handleCancelBooking";
+import type { BookingToDelete } from "../../handleCancelBooking";
 
 async function cancelAttendeeSeat(
-  req: CustomRequest,
+  data: {
+    seatReferenceUid?: string;
+    bookingToDelete: BookingToDelete;
+  },
   dataForWebhooks: {
     webhooks: {
       id: string;
@@ -26,17 +32,20 @@ async function cancelAttendeeSeat(
       payloadTemplate: string | null;
       appId: string | null;
       secret: string | null;
+      version: WebhookVersion;
     }[];
     evt: CalendarEvent;
     eventTypeInfo: EventTypeInfo;
   },
   eventTypeMetadata: EventTypeMetadata
 ) {
-  const input = bookingCancelAttendeeSeatSchema.safeParse(req.body);
+  const input = bookingCancelAttendeeSeatSchema.safeParse({
+    seatReferenceUid: data.seatReferenceUid,
+  });
   const { webhooks, evt, eventTypeInfo } = dataForWebhooks;
   if (!input.success) return;
   const { seatReferenceUid } = input.data;
-  const bookingToDelete = req.bookingToDelete;
+  const bookingToDelete = data.bookingToDelete;
   if (!bookingToDelete?.attendees.length || bookingToDelete.attendees.length < 2) return;
 
   if (!bookingToDelete.userId) {
@@ -61,9 +70,15 @@ async function cancelAttendeeSeat(
       },
     }),
   ]);
-  req.statusCode = 200;
 
   const attendee = bookingToDelete?.attendees.find((attendee) => attendee.id === seatReference.attendeeId);
+  const bookingToDeleteUser = bookingToDelete.user ?? null;
+  const delegationCredentials = bookingToDeleteUser
+    ? // We fetch delegation credentials with ServiceAccount key as CalendarService instance created later in the flow needs it
+      await getAllDelegationCredentialsForUserIncludeServiceAccountKey({
+        user: { email: bookingToDeleteUser.email, id: bookingToDeleteUser.id },
+      })
+    : [];
 
   if (attendee) {
     /* If there are references then we should update them as well */
@@ -71,24 +86,38 @@ async function cancelAttendeeSeat(
     const integrationsToUpdate = [];
 
     for (const reference of bookingToDelete.references) {
-      if (reference.credentialId) {
-        const credential = await prisma.credential.findUnique({
-          where: {
-            id: reference.credentialId,
+      if (reference.credentialId || reference.delegationCredentialId) {
+        const credential = await getDelegationCredentialOrFindRegularCredential({
+          id: {
+            credentialId: reference.credentialId,
+            delegationCredentialId: reference.delegationCredentialId,
           },
-          select: credentialForCalendarServiceSelect,
+          delegationCredentials,
         });
 
         if (credential) {
+          const videoCallReference = bookingToDelete.references.find((reference) =>
+            reference.type.includes("_video")
+          );
+
+          if (videoCallReference) {
+            evt.videoCallData = {
+              type: videoCallReference.type,
+              id: videoCallReference.meetingId,
+              password: videoCallReference?.meetingPassword,
+              url: videoCallReference.meetingUrl,
+            };
+          }
           const updatedEvt = {
             ...evt,
             attendees: evt.attendees.filter((evtAttendee) => attendee.email !== evtAttendee.email),
+            calendarDescription: getRichDescription(evt),
           };
-          if (reference.type.includes("_video")) {
+          if (reference.type.includes("_video") && reference.type !== "google_meet_video") {
             integrationsToUpdate.push(updateMeeting(credential, updatedEvt, reference));
           }
           if (reference.type.includes("_calendar")) {
-            const calendar = await getCalendar(credential);
+            const calendar = await getCalendar(credential, "booking");
             if (calendar) {
               integrationsToUpdate.push(
                 calendar?.updateEvent(reference.uid, updatedEvt, reference.externalCalendarId)
@@ -101,7 +130,7 @@ async function cancelAttendeeSeat(
 
     try {
       await Promise.all(integrationsToUpdate);
-    } catch (error) {
+    } catch {
       // Shouldn't stop code execution if integrations fail
       // as integrations was already updated
     }
@@ -135,6 +164,7 @@ async function cancelAttendeeSeat(
     ...eventTypeInfo,
     status: "CANCELLED",
     smsReminderNumber: bookingToDelete.smsReminderNumber || undefined,
+    requestReschedule: false,
   };
 
   const promises = webhooks.map((webhook) =>

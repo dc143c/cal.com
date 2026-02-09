@@ -1,18 +1,8 @@
-import { bootstrap } from "@/app";
-import { AppModule } from "@/app.module";
-import { PrismaModule } from "@/modules/prisma/prisma.module";
-import { TokensModule } from "@/modules/tokens/tokens.module";
-import { UsersModule } from "@/modules/users/users.module";
-import { UserWithProfile } from "@/modules/users/users.repository";
-import { CreateWebhookInputDto, UpdateWebhookInputDto } from "@/modules/webhooks/inputs/webhook.input";
-import {
-  OAuthClientWebhooksOutputResponseDto,
-  OAuthClientWebhookOutputResponseDto,
-} from "@/modules/webhooks/outputs/oauth-client-webhook.output";
+import type { PlatformOAuthClient, Team, Webhook } from "@calcom/prisma/client";
 import { INestApplication } from "@nestjs/common";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
-import * as request from "supertest";
+import request from "supertest";
 import { PlatformBillingRepositoryFixture } from "test/fixtures/repository/billing.repository.fixture";
 import { MembershipRepositoryFixture } from "test/fixtures/repository/membership.repository.fixture";
 import { OAuthClientRepositoryFixture } from "test/fixtures/repository/oauth-client.repository.fixture";
@@ -20,14 +10,24 @@ import { OrganizationRepositoryFixture } from "test/fixtures/repository/organiza
 import { ProfileRepositoryFixture } from "test/fixtures/repository/profiles.repository.fixture";
 import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
 import { WebhookRepositoryFixture } from "test/fixtures/repository/webhooks.repository.fixture";
-import { withNextAuth } from "test/utils/withNextAuth";
-
-import { PlatformOAuthClient, Team, Webhook } from "@calcom/prisma/client";
+import { randomString } from "test/utils/randomString";
+import { withApiAuth } from "test/utils/withApiAuth";
+import { AppModule } from "@/app.module";
+import { bootstrap } from "@/bootstrap";
+import { PrismaModule } from "@/modules/prisma/prisma.module";
+import { TokensModule } from "@/modules/tokens/tokens.module";
+import { UsersModule } from "@/modules/users/users.module";
+import { UserWithProfile } from "@/modules/users/users.repository";
+import { CreateWebhookInputDto, UpdateWebhookInputDto } from "@/modules/webhooks/inputs/webhook.input";
+import {
+  OAuthClientWebhookOutputResponseDto,
+  OAuthClientWebhooksOutputResponseDto,
+} from "@/modules/webhooks/outputs/oauth-client-webhook.output";
 
 describe("OAuth client WebhooksController (e2e)", () => {
   let app: INestApplication;
-  const userEmail = "oauth-client-webhook-controller-e2e@api.com";
-  const otherUserEmail = "other-oauth-client-webhook-controller-e2e@api.com";
+  const userEmail = `oauth-client-webhooks-user-${randomString()}@api.com`;
+  const otherUserEmail = `oauth-client-webhooks-other-user-${randomString()}@api.com`;
   let user: UserWithProfile;
   let otherUser: UserWithProfile;
   let oAuthClient: PlatformOAuthClient;
@@ -46,7 +46,7 @@ describe("OAuth client WebhooksController (e2e)", () => {
   let webhook: OAuthClientWebhookOutputResponseDto["data"];
 
   beforeAll(async () => {
-    const moduleRef = await withNextAuth(
+    const moduleRef = await withApiAuth(
       userEmail,
       Test.createTestingModule({
         imports: [AppModule, PrismaModule, UsersModule, TokensModule],
@@ -69,7 +69,7 @@ describe("OAuth client WebhooksController (e2e)", () => {
     });
 
     org = await orgRepositoryFixture.create({
-      name: "apiOrg",
+      name: `oauth-client-webhooks-organization-${randomString()}`,
       isOrganization: true,
       metadata: {
         isOrganization: true,
@@ -80,7 +80,7 @@ describe("OAuth client WebhooksController (e2e)", () => {
       isPlatform: true,
     });
     otherOrg = await orgRepositoryFixture.create({
-      name: "otherOrg",
+      name: `oauth-client-webhooks-other-organization-${randomString()}`,
       isOrganization: true,
       metadata: {
         isOrganization: true,
@@ -273,7 +273,7 @@ describe("OAuth client WebhooksController (e2e)", () => {
       .expect(403);
   });
 
-  it("/oauth-clients/:oAuthClientId/webhooks/:webhookId (DELETE) shoud fail to delete a webhook that does not exist", () => {
+  it("/oauth-clients/:oAuthClientId/webhooks/:webhookId (DELETE) should fail to delete a webhook that does not exist", () => {
     return request(app.getHttpServer())
       .delete(`/v2/oauth-clients/${oAuthClient.id}/webhooks/1234453`)
       .expect(404);

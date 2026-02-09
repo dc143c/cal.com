@@ -1,3 +1,5 @@
+import { useIsomorphicLayoutEffect } from "@calcom/lib/hooks/useIsomorphicLayoutEffect";
+import { useRef } from "react";
 import type { HorizontalTabItemProps } from "./HorizontalTabItem";
 import HorizontalTabItem from "./HorizontalTabItem";
 
@@ -6,20 +8,53 @@ export interface NavTabProps {
   linkShallow?: boolean;
   linkScroll?: boolean;
   actions?: JSX.Element;
+  scrollActiveTabIntoView?: boolean;
 }
 
-const HorizontalTabs = function ({ tabs, linkShallow, linkScroll, actions, ...props }: NavTabProps) {
+const HorizontalTabs = ({
+  tabs,
+  linkShallow,
+  linkScroll,
+  actions,
+  scrollActiveTabIntoView,
+  ...props
+}: NavTabProps): JSX.Element => {
+  const navRef = useRef<HTMLElement | null>(null);
+  const lastScrolledActiveHrefRef = useRef<string | null>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    if (!scrollActiveTabIntoView) return;
+    const navEl = navRef.current;
+    if (!navEl) return;
+
+    if (navEl.scrollWidth <= navEl.clientWidth) return;
+
+    const activeEl = navEl.querySelector<HTMLElement>("[aria-current='page']");
+    if (!activeEl) return;
+
+    const activeHref = activeEl.getAttribute("href");
+    if (activeHref && lastScrolledActiveHrefRef.current === activeHref) return;
+
+    activeEl.scrollIntoView({
+      behavior: "auto",
+      block: "nearest",
+      inline: "center",
+    });
+    if (activeHref) lastScrolledActiveHrefRef.current = activeHref;
+  }, [scrollActiveTabIntoView, tabs]);
+
   return (
-    <div className="mb-4 h-9 max-w-full lg:mb-5">
+    <div className="mb-4 max-w-full lg:mb-5">
       <nav
-        className="no-scrollbar flex max-h-9 space-x-1 overflow-x-scroll rounded-md"
+        className="no-scrollbar flex space-x-0.5 overflow-x-scroll rounded-md"
         aria-label="Tabs"
-        {...props}>
-        {tabs.map((tab, idx) => (
+        ref={navRef}
+        {...props}
+      >
+        {tabs.map((tab) => (
           <HorizontalTabItem
-            className="px-4 py-2.5"
             {...tab}
-            key={idx}
+            key={tab.href}
             linkShallow={linkShallow}
             linkScroll={linkScroll}
           />

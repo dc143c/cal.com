@@ -57,7 +57,7 @@ const calComCustomActivityFields: CloseComFieldOptions = [
  * Close.com as part of this integration, a new generic Lead will be created in order
  * to assign every contact created by this process, and it is named "From Cal.com"
  */
-export default class CloseComCRMService implements CRM {
+class CloseComCRMService implements CRM {
   private integrationName = "";
   private closeCom: CloseCom;
   private log: typeof logger;
@@ -133,7 +133,6 @@ export default class CloseComCRMService implements CRM {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async updateEvent(uid: string, event: CalendarEvent): Promise<CrmEvent> {
     const updatedEvent = await this.closeComUpdateCustomActivity(uid, event);
     return {
@@ -205,4 +204,20 @@ export default class CloseComCRMService implements CRM {
   getAppOptions() {
     console.log("No options implemented");
   }
+
+  async handleAttendeeNoShow() {
+    console.log("Not implemented");
+  }
+}
+
+/**
+ * Factory function that creates a Close.com CRM service instance.
+ * This is exported instead of the class to prevent internal types
+ * from leaking into the emitted .d.ts file.
+ */
+export default function BuildCrmService(
+  credential: CredentialPayload,
+  _appOptions?: Record<string, unknown>
+): CRM {
+  return new CloseComCRMService(credential);
 }

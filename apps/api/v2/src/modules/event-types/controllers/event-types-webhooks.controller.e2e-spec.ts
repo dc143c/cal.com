@@ -1,5 +1,15 @@
-import { bootstrap } from "@/app";
+import type { EventType, Webhook } from "@calcom/prisma/client";
+import { INestApplication } from "@nestjs/common";
+import { NestExpressApplication } from "@nestjs/platform-express";
+import { Test } from "@nestjs/testing";
+import request from "supertest";
+import { EventTypesRepositoryFixture } from "test/fixtures/repository/event-types.repository.fixture";
+import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
+import { WebhookRepositoryFixture } from "test/fixtures/repository/webhooks.repository.fixture";
+import { randomString } from "test/utils/randomString";
+import { withApiAuth } from "test/utils/withApiAuth";
 import { AppModule } from "@/app.module";
+import { bootstrap } from "@/bootstrap";
 import { PrismaModule } from "@/modules/prisma/prisma.module";
 import { TokensModule } from "@/modules/tokens/tokens.module";
 import { UsersModule } from "@/modules/users/users.module";
@@ -10,20 +20,10 @@ import {
   EventTypeWebhooksOutputResponseDto,
 } from "@/modules/webhooks/outputs/event-type-webhook.output";
 import { DeleteManyWebhooksOutputResponseDto } from "@/modules/webhooks/outputs/webhook.output";
-import { INestApplication } from "@nestjs/common";
-import { NestExpressApplication } from "@nestjs/platform-express";
-import { Test } from "@nestjs/testing";
-import * as request from "supertest";
-import { EventTypesRepositoryFixture } from "test/fixtures/repository/event-types.repository.fixture";
-import { UserRepositoryFixture } from "test/fixtures/repository/users.repository.fixture";
-import { WebhookRepositoryFixture } from "test/fixtures/repository/webhooks.repository.fixture";
-import { withApiAuth } from "test/utils/withApiAuth";
-
-import { EventType, Webhook } from "@calcom/prisma/client";
 
 describe("EventTypes WebhooksController (e2e)", () => {
   let app: INestApplication;
-  const userEmail = "event-types-webhook-controller-e2e@api.com";
+  const userEmail = `event-types-webhooks-user-${randomString()}@api.com`;
   let user: UserWithProfile;
   let otherUser: UserWithProfile;
   let eventType: EventType;
@@ -35,7 +35,6 @@ describe("EventTypes WebhooksController (e2e)", () => {
   let webhookRepositoryFixture: WebhookRepositoryFixture;
 
   let webhook: EventTypeWebhookOutputResponseDto["data"];
-  let webhook2: Webhook;
   let otherWebhook: Webhook;
 
   beforeAll(async () => {
@@ -55,14 +54,14 @@ describe("EventTypes WebhooksController (e2e)", () => {
     });
 
     otherUser = await userRepositoryFixture.create({
-      email: "other-user-webhook-controller@api.com",
-      username: "other-user-webhook-controller@api.com",
+      email: `event-types-webhooks-other-user-${randomString()}@api.com`,
+      username: `event-types-webhooks-other-user-${randomString()}@api.com`,
     });
 
     eventType = await eventTypeRepositoryFixture.create(
       {
         title: "Event Type 1",
-        slug: "webhook-event-type-1",
+        slug: `event-types-webhooks-event-type-${randomString()}`,
         length: 60,
       },
       user.id
@@ -71,7 +70,7 @@ describe("EventTypes WebhooksController (e2e)", () => {
     eventType2 = await eventTypeRepositoryFixture.create(
       {
         title: "Event Type 2",
-        slug: "webhook-event-type-2",
+        slug: `event-types-webhooks-event-type-${randomString()}`,
         length: 60,
       },
       user.id
@@ -80,7 +79,7 @@ describe("EventTypes WebhooksController (e2e)", () => {
     otherEventType = await eventTypeRepositoryFixture.create(
       {
         title: "Other Event Type ",
-        slug: "other-webhook-event-type",
+        slug: `event-types-webhooks-other-event-type-${randomString()}`,
         length: 60,
       },
       otherUser.id
@@ -154,7 +153,7 @@ describe("EventTypes WebhooksController (e2e)", () => {
             eventTypeId: eventType2.id,
           },
         } satisfies EventTypeWebhookOutputResponseDto);
-        webhook2 = res.body.data;
+        //webhook2 = res.body.data;
       });
   });
 
@@ -281,13 +280,13 @@ describe("EventTypes WebhooksController (e2e)", () => {
       });
   });
 
-  it("/event-types/:eventTypeId/webhooks/:webhookId (DELETE) shoud fail to delete a webhook that does not exist", () => {
+  it("/event-types/:eventTypeId/webhooks/:webhookId (DELETE) should fail to delete a webhook that does not exist", () => {
     return request(app.getHttpServer())
       .delete(`/v2/event-types/${eventType.id}/webhooks/1234453`)
       .expect(404);
   });
 
-  it("/event-types/:eventTypeId/webhooks/:webhookId (DELETE) shoud fail to delete a webhook that does not belong to user", () => {
+  it("/event-types/:eventTypeId/webhooks/:webhookId (DELETE) should fail to delete a webhook that does not belong to user", () => {
     return request(app.getHttpServer())
       .delete(`/v2/event-types/${otherEventType.id}/webhooks/${otherWebhook.id}`)
       .expect(403);

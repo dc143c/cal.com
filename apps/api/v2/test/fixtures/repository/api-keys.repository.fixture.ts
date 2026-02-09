@@ -1,7 +1,7 @@
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { TestingModule } from "@nestjs/testing";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes, createHash } from "node:crypto";
 
 export class ApiKeysRepositoryFixture {
   private prismaReadClient: PrismaReadService["prisma"];
@@ -14,15 +14,24 @@ export class ApiKeysRepositoryFixture {
 
   async createApiKey(userId: number, expiresAt: Date | null, teamId?: number) {
     const keyString = randomBytes(16).toString("hex");
+    const hashedKey = createHash("sha256").update(keyString).digest("hex");
     const apiKey = await this.prismaWriteClient.apiKey.create({
       data: {
         userId,
         teamId,
-        hashedKey: createHash("sha256").update(keyString).digest("hex"),
+        hashedKey,
         expiresAt: expiresAt,
       },
     });
 
     return { apiKey, keyString };
+  }
+
+  async getTeamApiKeys(teamId: number) {
+    return await this.prismaReadClient.apiKey.findMany({
+      where: {
+        teamId,
+      },
+    });
   }
 }

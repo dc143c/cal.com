@@ -3,7 +3,9 @@ import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { CreateManagedUserInput } from "@/modules/users/inputs/create-managed-user.input";
 import { UpdateManagedUserInput } from "@/modules/users/inputs/update-managed-user.input";
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { Profile, User, Team, Prisma } from "@prisma/client";
+
+import { CreationSource } from "@calcom/platform-libraries";
+import type { Profile, User, Team, Prisma } from "@calcom/prisma/client";
 
 export type UserWithProfile = User & {
   movedToProfile?: (Profile & { organization: Pick<Team, "isPlatform" | "id" | "slug" | "name"> }) | null;
@@ -20,8 +22,6 @@ export class UsersRepository {
     oAuthClientId: string,
     isPlatformManaged: boolean
   ) {
-    this.formatInput(user);
-
     return this.dbWrite.prisma.user.create({
       data: {
         ...user,
@@ -30,6 +30,7 @@ export class UsersRepository {
           connect: { id: oAuthClientId },
         },
         isPlatformManaged,
+        creationSource: CreationSource.API_V2,
       },
     });
   }
@@ -71,6 +72,27 @@ export class UsersRepository {
     return this.dbRead.prisma.user.findUnique({
       where: {
         id: userId,
+      },
+      include: {
+        movedToProfile: {
+          include: { organization: { select: { isPlatform: true, name: true, slug: true, id: true } } },
+        },
+        profiles: {
+          include: { organization: { select: { isPlatform: true, name: true, slug: true, id: true } } },
+        },
+      },
+    });
+  }
+
+  async findOwnerByTeamIdWithProfile(teamId: number): Promise<UserWithProfile | null> {
+    return this.dbRead.prisma.user.findFirst({
+      where: {
+        teams: {
+          some: {
+            teamId,
+            role: "OWNER",
+          },
+        },
       },
       include: {
         movedToProfile: {
@@ -142,6 +164,22 @@ export class UsersRepository {
     });
   }
 
+  async findByUsernameWithProfile(username: string) {
+    return this.dbRead.prisma.user.findFirst({
+      where: { username },
+      include: {
+        movedToProfile: {
+          include: { organization: { select: { isPlatform: true, name: true, slug: true, id: true } } },
+        },
+        profiles: {
+          include: { organization: { select: { isPlatform: true, name: true, slug: true, id: true } } },
+        },
+      },
+    });
+  }
+
+
+
   async findByUsername(username: string, orgSlug?: string, orgId?: number) {
     return this.dbRead.prisma.user.findFirst({
       where:
@@ -175,9 +213,34 @@ export class UsersRepository {
     });
   }
 
-  async update(userId: number, updateData: UpdateManagedUserInput) {
-    this.formatInput(updateData);
+  async findManagedUsersByOAuthClientIdAndEmails(
+    oauthClientId: string,
+    cursor: number,
+    limit: number,
+    oAuthEmails?: string[]
+  ) {
+    return this.dbRead.prisma.user.findMany({
+      where: {
+        platformOAuthClients: {
+          some: {
+            id: oauthClientId,
+          },
+        },
+        isPlatformManaged: true,
+        ...(oAuthEmails && oAuthEmails.length > 0
+          ? {
+              email: {
+                in: oAuthEmails,
+              },
+            }
+          : {}),
+      },
+      take: limit,
+      skip: cursor,
+    });
+  }
 
+  async update(userId: number, updateData: UpdateManagedUserInput) {
     return this.dbWrite.prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -206,12 +269,6 @@ export class UsersRepository {
     });
   }
 
-  formatInput(userInput: CreateManagedUserInput | UpdateManagedUserInput) {
-    if (userInput.weekStart) {
-      userInput.weekStart = userInput.weekStart;
-    }
-  }
-
   setDefaultSchedule(userId: number, scheduleId: number) {
     return this.dbWrite.prisma.user.update({
       where: { id: userId },
@@ -229,6 +286,14 @@ export class UsersRepository {
     return user?.defaultScheduleId;
   }
 
+  async getUsersScheduleDefaultIds(userIds: number[]): Promise<Map<number, number | null>> {
+    const users = await this.dbRead.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, defaultScheduleId: true },
+    });
+    return new Map(users.map((user) => [user.id, user.defaultScheduleId]));
+  }
+
   async getOrganizationUsers(organizationId: number) {
     const profiles = await this.dbRead.prisma.profile.findMany({
       where: {
@@ -238,7 +303,7 @@ export class UsersRepository {
         user: true,
       },
     });
-    return profiles.map((profile) => profile.user);
+    return profiles.map((profile: Profile & { user: User }) => profile.user);
   }
 
   async setDefaultConferencingApp(userId: number, appSlug?: string, appLink?: string) {
@@ -287,5 +352,144 @@ export class UsersRepository {
         id: true,
       },
     });
+  }
+
+  async getOrgsManagedUserEmailsBySubscriptionId(subscriptionId: string) {
+    return await this.dbRead.prisma.user.findMany({
+      distinct: ["email"],
+      where: {
+        isPlatformManaged: true,
+        profiles: {
+          some: {
+            organization: {
+              platformBilling: {
+                subscriptionId,
+              },
+            },
+          },
+        },
+      },
+      select: {
+        email: true,
+      },
+    });
+  }
+
+  async getActiveManagedUsersAsHost(subscriptionId: string, startTime: Date, endTime: Date) {
+    return await this.dbRead.prisma.user.findMany({
+      distinct: ["email"],
+      where: {
+        isPlatformManaged: true,
+        profiles: {
+          some: {
+            organization: {
+              platformBilling: {
+                subscriptionId,
+              },
+            },
+          },
+        },
+        bookings: {
+          some: {
+            userId: { not: null },
+            startTime: {
+              gte: startTime,
+              lte: endTime,
+            },
+          },
+        },
+      },
+      select: {
+        email: true,
+      },
+    });
+  }
+
+  async getActiveManagedUsersAsAttendee(managedUsersEmails: string[], startTime: Date, endTime: Date) {
+    return await this.dbRead.prisma.attendee.findMany({
+      distinct: ["email"],
+      where: {
+        email: { in: managedUsersEmails },
+        booking: {
+          startTime: {
+            gte: startTime,
+            lte: endTime,
+          },
+        },
+      },
+      select: {
+        email: true,
+      },
+    });
+  }
+
+  async getUserEmailsVerifiedForTeam(teamId: number) {
+    return this.dbRead.prisma.user.findMany({
+      where: {
+        teams: {
+          some: {
+            teamId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        secondaryEmails: {
+          where: {
+            emailVerified: {
+              not: null,
+            },
+          },
+          select: {
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findVerifiedSecondaryEmail(userId: number, email: string) {
+    return this.dbRead.prisma.secondaryEmail.findUnique({
+      where: {
+        userId_email: {
+          userId: userId,
+          email: email,
+        },
+      },
+      select: {
+        id: true,
+        emailVerified: true,
+      },
+    });
+  }
+
+  async swapPrimaryEmailWithSecondaryEmail(
+    userId: number,
+    secondaryEmailId: number,
+    oldPrimaryEmail: string,
+    oldPrimaryEmailVerified: Date | null,
+    newPrimaryEmail: string
+  ) {
+    const [, updatedUser] = await this.dbWrite.prisma.$transaction([
+      this.dbWrite.prisma.secondaryEmail.update({
+        where: {
+          id: secondaryEmailId,
+          userId: userId,
+        },
+        data: {
+          email: oldPrimaryEmail,
+          emailVerified: oldPrimaryEmailVerified,
+        },
+      }),
+      this.dbWrite.prisma.user.update({
+        where: { id: userId },
+        data: {
+          email: newPrimaryEmail,
+        },
+      }),
+    ]);
+
+    return updatedUser;
   }
 }
